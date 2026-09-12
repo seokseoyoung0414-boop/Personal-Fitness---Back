@@ -15,9 +15,9 @@ public class NodySpringApplication {
     public static void main(String[] args) {
         // 1. .env 파일 로드 (파일이 없어도 에러 없이 무시하도록 ignoreIfMissing 설정)
         Dotenv dotenv = Dotenv.configure()
-                .filename("env.txt")
                 .ignoreIfMissing()
                 .load();
+
         // 2. .env의 모든 Key-Value를 System.setProperty로 등록
         dotenv.entries().forEach(entry -> {
             System.setProperty(entry.getKey(), entry.getValue());

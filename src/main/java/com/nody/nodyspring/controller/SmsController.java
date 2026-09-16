@@ -25,8 +25,18 @@ public class SmsController {
     // 1️⃣ 회원가입 시 인증번호 전송 (등록 여부 확인 안함)
     @PostMapping("/send-code/signup")
     public ResponseEntity<?> sendCodeForSignup(@RequestBody @Valid SendCodeRequestDto dto) {
+
+        System.out.println("========================================");
+        System.out.println("[SMS] /sms/send-code/signup 요청 도착");
+        System.out.println("[SMS] 전화번호: " + dto.getPhone());
+        System.out.println("========================================");
+
         String sessionId = verificationService.sendCode(dto.getPhone());
-        return ResponseEntity.ok(Map.of("message", "회원가입 인증번호 전송 완료", "sessionId", sessionId));
+
+        return ResponseEntity.ok(Map.of(
+                "message", "회원가입 인증번호 전송 완료",
+                "sessionId", sessionId
+        ));
     }
 
     // 2️⃣ 비밀번호 찾기 시 인증번호 전송 (등록된 번호인지 확인)

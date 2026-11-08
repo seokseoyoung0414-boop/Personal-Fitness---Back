@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .requestMatchers("/post/img/**").permitAll()
                 .requestMatchers("/ws-chat/**").permitAll()
                 .requestMatchers("/sms/**").permitAll()
+                .requestMatchers("/friend/**").permitAll()
                 .anyRequest().authenticated();                // 그 외는 인증 필요
         return http.build();
     }

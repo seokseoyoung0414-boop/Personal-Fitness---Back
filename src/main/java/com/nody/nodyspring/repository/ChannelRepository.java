@@ -18,6 +18,8 @@ public interface ChannelRepository extends JpaRepository<Channel, Integer> {
     // 종료일이 지난 미완료 채널 조회
     List<Channel> findByEndDateBeforeAndCompleteFalse(LocalDate today);
 
+    List<Channel> findByCreator_UseridOrderByIdxDesc(String userid);
+
     // 채널 제목 조회
     @Query("SELECT ch.channelTitle FROM Channel ch WHERE ch.idx = :id")
     String findTitleById(@Param("id") int id);

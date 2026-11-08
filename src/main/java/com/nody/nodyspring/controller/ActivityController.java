@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -54,6 +55,25 @@ public class ActivityController {
                     "로그인이 만료되었습니다. 다시 로그인해주세요."
             );
         }
+    }
+
+
+    // ==================================================
+    // 개인 진행 중인 채널별 운동시간 랭킹 조회
+    // GET /channel/activity/ranking
+    // ==================================================
+
+    @GetMapping("/ranking")
+    public List<ChannelActivityRankingResponse> getMyChannelActivityRanking(
+
+            @CookieValue(name = "token", required = false)
+            String token
+
+    ) {
+
+        String userid = getUserid(token);
+
+        return activityService.getMyChannelActivityRanking(userid);
     }
 
 

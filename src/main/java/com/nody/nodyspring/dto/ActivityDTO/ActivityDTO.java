@@ -82,4 +82,11 @@ public class ActivityDTO {
             List<ChartPoint> chart,
             List<RecordResponse> records
     ) {}
+    // 개인 진행 중인 채널별 운동시간 랭킹 응답
+    public record ChannelActivityRankingResponse(
+            Integer channelIdx,
+            String channelTitle,
+            String sport,
+            Long totalDurationSeconds
+    ) {}
 }

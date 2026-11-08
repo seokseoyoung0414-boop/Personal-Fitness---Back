@@ -140,10 +140,7 @@ public class ActivityService {
 
         for (ActivityRecord record : records) {
 
-            // ------------------------------------------
             // 전체 운동 통계 합산
-            // ------------------------------------------
-
             totalDistance = totalDistance.add(
                     record.getDistanceKm()
             );
@@ -155,13 +152,7 @@ public class ActivityService {
             totalSeconds += record.getDurationSeconds();
             totalSteps += record.getSteps();
 
-            // ------------------------------------------
             // 해당 기록의 실제 달성량
-            // 걷기: 걸음 수
-            // 러닝 / 사이클: 거리
-            // 기타: 칼로리
-            // ------------------------------------------
-
             BigDecimal recordAchievedValue =
                     getAchievedValue(channel.getSport(), record);
 
@@ -170,19 +161,13 @@ public class ActivityService {
                     recordAchievedValue
             );
 
-            // ------------------------------------------
             // 개별 운동 목표 달성률
-            // ------------------------------------------
-
             BigDecimal recordAchievementRate = calculateRate(
                     recordAchievedValue,
                     goal
             );
 
-            // ------------------------------------------
             // 개별 운동 목표 달성 여부
-            // ------------------------------------------
-
             if (goal.signum() > 0) {
 
                 if (recordAchievedValue.compareTo(goal) >= 0) {
@@ -192,10 +177,7 @@ public class ActivityService {
                 }
             }
 
-            // ------------------------------------------
             // 개별 운동 기록 응답
-            // ------------------------------------------
-
             recordResponses.add(new RecordResponse(
                     record.getIdx(),
                     record.getRecordedAt(),
@@ -206,10 +188,7 @@ public class ActivityService {
                     recordAchievementRate
             ));
 
-            // ------------------------------------------
             // 날짜별 그래프 데이터
-            // ------------------------------------------
-
             LocalDate date =
                     record.getRecordedAt().toLocalDate();
 
@@ -230,11 +209,7 @@ public class ActivityService {
             daily.steps += record.getSteps();
         }
 
-        // ==================================================
         // 전체 운동 횟수 기준 목표 달성률
-        // 성공 횟수 / 전체 운동 횟수 * 100
-        // ==================================================
-
         BigDecimal totalAchievementRate = BigDecimal.ZERO;
 
         if (goal.signum() > 0 && totalCount > 0) {
@@ -248,10 +223,7 @@ public class ActivityService {
                     );
         }
 
-        // ==================================================
         // 날짜별 그래프 데이터 생성
-        // ==================================================
-
         List<ChartPoint> chart = dailyMap.entrySet()
                 .stream()
                 .map(entry -> {
@@ -268,16 +240,10 @@ public class ActivityService {
                 })
                 .toList();
 
-        // ==================================================
         // 기록 목록은 최근 기록부터 표시
-        // ==================================================
-
         Collections.reverse(recordResponses);
 
-        // ==================================================
         // 최종 상세 통계 응답
-        // ==================================================
-
         return new DetailResponse(
                 toChannelResponse(channel),
                 totalDistance,
@@ -292,6 +258,32 @@ public class ActivityService {
                 chart,
                 recordResponses
         );
+    }
+
+
+    // ==================================================
+    // 개인 진행 중인 채널별 운동시간 랭킹
+    // 누적 운동시간이 긴 순서
+    // ==================================================
+
+    public List<ChannelActivityRankingResponse> getMyChannelActivityRanking(
+            String userid
+    ) {
+
+        LocalDate today = LocalDate.now(KOREA);
+
+        return recordRepository
+                .findMyOngoingChannelRanking(userid, today)
+                .stream()
+                .map(ranking -> new ChannelActivityRankingResponse(
+                        ranking.getChannelIdx(),
+                        ranking.getChannelTitle(),
+                        ranking.getSport(),
+                        ranking.getTotalDurationSeconds() == null
+                                ? 0L
+                                : ranking.getTotalDurationSeconds()
+                ))
+                .toList();
     }
 
 

@@ -31,7 +31,4 @@ public class User {
     private String phone;
 
     private LocalDateTime bannedUntil;
-
-    @Column(nullable = false)
-    private int point = 0; // 또는 DB에서 DEFAULT 0 설정
 }

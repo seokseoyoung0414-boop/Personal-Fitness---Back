@@ -275,8 +275,7 @@ public class UserController {
                             "userid", user.getUserid(),
                             "nickname", user.getNickname(),
                             "email", user.getEmail(),
-                            "phone", user.getPhone(),
-                            "point", user.getPoint()
+                            "phone", user.getPhone()
                     )
             );
 

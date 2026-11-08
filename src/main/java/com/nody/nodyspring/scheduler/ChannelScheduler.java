@@ -2,7 +2,7 @@ package com.nody.nodyspring.scheduler;
 
 import com.nody.nodyspring.DB.Channel;
 import com.nody.nodyspring.repository.ChannelRepository;
-import com.nody.nodyspring.repository.ChannelUserRepository;
+
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,28 +17,30 @@ public class ChannelScheduler {
     @Autowired
     private ChannelRepository channelRepository;
 
-    @Autowired
-    private ChannelUserRepository channelUserRepository;
-
-    @Scheduled(cron = "0 10 0 * * *") // → KST 00:10
+    /**
+     * 매일 한국 시간 00:10에 실행
+     *
+     * 종료일이 지난 채널의 complete를 true로 변경
+     */
+    @Scheduled(
+            cron = "0 10 0 * * *",
+            zone = "Asia/Seoul"
+    )
     @Transactional
     public void processChannelsDaily() {
+
         LocalDate today = LocalDate.now();
 
-        // 1. 시작일이 오늘인데 channelBuild = false → 삭제
-        List<Channel> toDelete = channelRepository.findByStartDateAndChannelBuild(today, false);
+        // 종료일이 오늘보다 이전이고 아직 완료되지 않은 채널 조회
+        List<Channel> toComplete =
+                channelRepository.findByEndDateBeforeAndCompleteFalse(today);
 
-        for (Channel channel : toDelete) {
-            // 자식 레코드 먼저 삭제
-            channelUserRepository.deleteByChannel(channel);
-        }
-
-        // 이제 부모 채널 삭제 가능
-        channelRepository.deleteAll(toDelete);
-
-        // 2. 종료일 + 1 <= 오늘 → complete = true 처리
-        List<Channel> toComplete = channelRepository.findByEndDateBeforeAndCompleteFalse(today);
+        // 완료 상태 변경
         toComplete.forEach(channel -> channel.setComplete(true));
-        channelRepository.saveAll(toComplete);
+
+        // 변경사항 저장
+        if (!toComplete.isEmpty()) {
+            channelRepository.saveAll(toComplete);
+        }
     }
 }

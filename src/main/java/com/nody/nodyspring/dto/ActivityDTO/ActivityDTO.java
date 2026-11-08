@@ -76,8 +76,10 @@ public class ActivityDTO {
             Long totalSteps,
             BigDecimal achievedValue,
             BigDecimal achievementRate,
+            Integer totalCount,
+            Integer successCount,
+            Integer failCount,
             List<ChartPoint> chart,
             List<RecordResponse> records
-    ) {
-    }
+    ) {}
 }

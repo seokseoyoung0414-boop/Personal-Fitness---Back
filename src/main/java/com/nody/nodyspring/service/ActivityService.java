@@ -1,13 +1,14 @@
+
 package com.nody.nodyspring.service;
 
-import com.nody.nodyspring.DB.ActivityGoal;
+import com.nody.nodyspring.DB.Channel;
 import com.nody.nodyspring.DB.ActivityRecord;
-import com.nody.nodyspring.DB.User;
-import com.nody.nodyspring.dto.ActivityDTO.ActivityDTO.*;
-import com.nody.nodyspring.repository.ActivityGoalRepository;
+import com.nody.nodyspring.repository.ChannelRepository;
 import com.nody.nodyspring.repository.ActivityRecordRepository;
-import com.nody.nodyspring.repository.UserRepository;
+import com.nody.nodyspring.dto.ActivityDTO.ActivityDTO.*;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,132 +26,17 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class ActivityService {
 
-    private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
+    private static final ZoneId KOREA =
+            ZoneId.of("Asia/Seoul");
 
     private static final Set<String> SPORTS = Set.of(
             "걷기", "러닝", "등산", "사이클",
             "헬스", "요가", "필라테스", "기타"
     );
 
-    private final ActivityGoalRepository goalRepository;
+    private final ChannelRepository channelRepository;
     private final ActivityRecordRepository recordRepository;
-    private final UserRepository userRepository;
 
-    // ==================================================
-    // 내 목표 목록
-    // ==================================================
-
-    public List<GoalResponse> getGoals(String userid) {
-        return goalRepository
-                .findByUser_UseridOrderByCreatedAtDesc(userid)
-                .stream()
-                .map(this::toGoalResponse)
-                .toList();
-    }
-
-    // ==================================================
-    // 목표 하나 조회
-    // ==================================================
-
-    public GoalResponse getGoal(String userid, Long goalId) {
-        return toGoalResponse(findMyGoal(userid, goalId));
-    }
-
-    // ==================================================
-    // 목표 생성
-    // ==================================================
-
-    @Transactional
-    public GoalResponse createGoal(
-            String userid,
-            GoalRequest request
-    ) {
-        validateGoal(request);
-
-        if (request.startDate().isBefore(LocalDate.now(KOREA))) {
-            throw badRequest("시작일은 오늘 이후로 선택해주세요.");
-        }
-
-        User user = userRepository.findByUserid(userid)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "사용자를 찾을 수 없습니다."
-                ));
-
-        ActivityGoal goal = ActivityGoal.builder()
-                .user(user)
-                .title(request.channelTitle().trim())
-                .comment(request.channelComment().trim())
-                .sport(request.sport())
-                .goal(request.goal())
-                .startDate(request.startDate())
-                .endDate(request.endDate())
-                .build();
-
-        return toGoalResponse(goalRepository.save(goal));
-    }
-
-    // ==================================================
-    // 목표 수정
-    // ==================================================
-
-    @Transactional
-    public GoalResponse updateGoal(
-            String userid,
-            Long goalId,
-            GoalRequest request
-    ) {
-        ActivityGoal goal = findMyGoal(userid, goalId);
-        validateGoal(request);
-
-        // 이미 저장된 기록이 있을 때 종목을 바꾸면
-        // 목표 단위와 기존 기록 해석이 달라질 수 있으므로 제한
-        List<ActivityRecord> records = recordRepository
-                .findByGoal_IdxOrderByRecordedAtAscIdxAsc(goalId);
-
-        if (!records.isEmpty()
-                && !goal.getSport().equals(request.sport())) {
-            throw badRequest(
-                    "운동 기록이 있는 목표는 종목을 변경할 수 없습니다."
-            );
-        }
-
-        // 수정한 기간 밖으로 기존 기록이 밀려나지 않도록 확인
-        for (ActivityRecord record : records) {
-            LocalDate date = record.getRecordedAt().toLocalDate();
-
-            if (date.isBefore(request.startDate())
-                    || date.isAfter(request.endDate())) {
-                throw badRequest(
-                        "기존 운동 기록이 포함되도록 기간을 설정해주세요."
-                );
-            }
-        }
-
-        goal.setTitle(request.channelTitle().trim());
-        goal.setComment(request.channelComment().trim());
-        goal.setSport(request.sport());
-        goal.setGoal(request.goal());
-        goal.setStartDate(request.startDate());
-        goal.setEndDate(request.endDate());
-
-        return toGoalResponse(goal);
-    }
-
-    // ==================================================
-    // 목표 삭제
-    // 해당 목표의 운동 기록도 함께 삭제
-    // ==================================================
-
-    @Transactional
-    public void deleteGoal(String userid, Long goalId) {
-        ActivityGoal goal = findMyGoal(userid, goalId);
-
-        recordRepository.deleteByGoal_Idx(goalId);
-        recordRepository.flush();
-
-        goalRepository.delete(goal);
-    }
 
     // ==================================================
     // 운동 기록 저장
@@ -160,15 +46,16 @@ public class ActivityService {
     @Transactional
     public DetailResponse addRecord(
             String userid,
-            Long goalId,
+            Integer channelIdx,
             RecordRequest request
     ) {
-        ActivityGoal goal = findMyGoal(userid, goalId);
 
-        validateRecord(goal, request);
+        Channel channel = findMyChannel(userid, channelIdx);
+
+        validateRecord(channel, request);
 
         ActivityRecord record = ActivityRecord.builder()
-                .goal(goal)
+                .channel(channel)
                 .recordedAt(request.recordedAt())
                 .durationSeconds(request.durationSeconds())
                 .distanceKm(request.distanceKm())
@@ -178,50 +65,57 @@ public class ActivityService {
 
         recordRepository.saveAndFlush(record);
 
-        return getDetail(userid, goalId);
+        return getDetail(userid, channelIdx);
     }
+
 
     // ==================================================
     // 운동 기록 삭제
-    // 본인 목표에 속한 기록만 삭제
+    // 본인 채널에 속한 기록만 삭제
     // ==================================================
 
     @Transactional
     public DetailResponse deleteRecord(
             String userid,
-            Long goalId,
+            Integer channelIdx,
             Long recordId
     ) {
-        findMyGoal(userid, goalId);
+
+        findMyChannel(userid, channelIdx);
 
         ActivityRecord record = recordRepository.findById(recordId)
                 .orElseThrow(() -> notFound(
                         "운동 기록을 찾을 수 없습니다."
                 ));
 
-        if (!record.getGoal().getIdx().equals(goalId)) {
+        if (!record.getChannel().getIdx().equals(channelIdx)) {
             throw notFound("운동 기록을 찾을 수 없습니다.");
         }
 
         recordRepository.delete(record);
         recordRepository.flush();
 
-        return getDetail(userid, goalId);
+        return getDetail(userid, channelIdx);
     }
 
+
     // ==================================================
-    // 상세 통계
-    // 합계 / 달성률 / 날짜별 그래프 / 기록 목록
+    // 채널별 운동 통계
+    // 합계 / 운동 횟수별 달성률 / 날짜별 그래프 / 기록 목록
     // ==================================================
 
     public DetailResponse getDetail(
             String userid,
-            Long goalId
+            Integer channelIdx
     ) {
-        ActivityGoal goal = findMyGoal(userid, goalId);
 
-        List<ActivityRecord> records = recordRepository
-                .findByGoal_IdxOrderByRecordedAtAscIdxAsc(goalId);
+        Channel channel = findMyChannel(userid, channelIdx);
+
+        List<ActivityRecord> records =
+                recordRepository
+                        .findByChannel_IdxOrderByRecordedAtAscIdxAsc(
+                                channelIdx
+                        );
 
         BigDecimal totalDistance = BigDecimal.ZERO;
         BigDecimal totalCalories = BigDecimal.ZERO;
@@ -230,19 +124,77 @@ public class ActivityService {
         long totalSeconds = 0;
         long totalSteps = 0;
 
+        // 1회 운동 목표량
+        BigDecimal goal = BigDecimal.valueOf(channel.getGoal());
+
+        // 전체 운동 횟수
+        int totalCount = records.size();
+
+        // 목표 달성 및 미달 횟수
+        int successCount = 0;
+        int failCount = 0;
+
         Map<LocalDate, DailyTotal> dailyMap = new TreeMap<>();
+
         List<RecordResponse> recordResponses = new ArrayList<>();
 
         for (ActivityRecord record : records) {
-            totalDistance = totalDistance.add(record.getDistanceKm());
-            totalCalories = totalCalories.add(record.getCalories());
+
+            // ------------------------------------------
+            // 전체 운동 통계 합산
+            // ------------------------------------------
+
+            totalDistance = totalDistance.add(
+                    record.getDistanceKm()
+            );
+
+            totalCalories = totalCalories.add(
+                    record.getCalories()
+            );
 
             totalSeconds += record.getDurationSeconds();
             totalSteps += record.getSteps();
 
+            // ------------------------------------------
+            // 해당 기록의 실제 달성량
+            // 걷기: 걸음 수
+            // 러닝 / 사이클: 거리
+            // 기타: 칼로리
+            // ------------------------------------------
+
+            BigDecimal recordAchievedValue =
+                    getAchievedValue(channel.getSport(), record);
+
+            // 전체 누적 달성량
             cumulativeValue = cumulativeValue.add(
-                    getAchievedValue(goal.getSport(), record)
+                    recordAchievedValue
             );
+
+            // ------------------------------------------
+            // 개별 운동 목표 달성률
+            // ------------------------------------------
+
+            BigDecimal recordAchievementRate = calculateRate(
+                    recordAchievedValue,
+                    goal
+            );
+
+            // ------------------------------------------
+            // 개별 운동 목표 달성 여부
+            // ------------------------------------------
+
+            if (goal.signum() > 0) {
+
+                if (recordAchievedValue.compareTo(goal) >= 0) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            }
+
+            // ------------------------------------------
+            // 개별 운동 기록 응답
+            // ------------------------------------------
 
             recordResponses.add(new RecordResponse(
                     record.getIdx(),
@@ -251,25 +203,59 @@ public class ActivityService {
                     record.getDistanceKm(),
                     record.getCalories(),
                     record.getSteps(),
-                    calculateRate(cumulativeValue, goal.getGoal())
+                    recordAchievementRate
             ));
 
-            LocalDate date = record.getRecordedAt().toLocalDate();
+            // ------------------------------------------
+            // 날짜별 그래프 데이터
+            // ------------------------------------------
+
+            LocalDate date =
+                    record.getRecordedAt().toLocalDate();
 
             DailyTotal daily = dailyMap.computeIfAbsent(
                     date,
                     ignored -> new DailyTotal()
             );
 
-            daily.distance = daily.distance.add(record.getDistanceKm());
-            daily.calories = daily.calories.add(record.getCalories());
+            daily.distance = daily.distance.add(
+                    record.getDistanceKm()
+            );
+
+            daily.calories = daily.calories.add(
+                    record.getCalories()
+            );
+
             daily.seconds += record.getDurationSeconds();
             daily.steps += record.getSteps();
         }
 
+        // ==================================================
+        // 전체 운동 횟수 기준 목표 달성률
+        // 성공 횟수 / 전체 운동 횟수 * 100
+        // ==================================================
+
+        BigDecimal totalAchievementRate = BigDecimal.ZERO;
+
+        if (goal.signum() > 0 && totalCount > 0) {
+
+            totalAchievementRate = BigDecimal.valueOf(successCount)
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(
+                            BigDecimal.valueOf(totalCount),
+                            2,
+                            RoundingMode.HALF_UP
+                    );
+        }
+
+        // ==================================================
+        // 날짜별 그래프 데이터 생성
+        // ==================================================
+
         List<ChartPoint> chart = dailyMap.entrySet()
                 .stream()
                 .map(entry -> {
+
                     DailyTotal daily = entry.getValue();
 
                     return new ChartPoint(
@@ -282,75 +268,91 @@ public class ActivityService {
                 })
                 .toList();
 
-        // 목록은 최근 기록부터 표시
+        // ==================================================
+        // 기록 목록은 최근 기록부터 표시
+        // ==================================================
+
         Collections.reverse(recordResponses);
 
+        // ==================================================
+        // 최종 상세 통계 응답
+        // ==================================================
+
         return new DetailResponse(
-                toGoalResponse(goal),
+                toChannelResponse(channel),
                 totalDistance,
                 totalSeconds,
                 totalCalories,
                 totalSteps,
                 cumulativeValue,
-                calculateRate(cumulativeValue, goal.getGoal()),
+                totalAchievementRate,
+                totalCount,
+                successCount,
+                failCount,
                 chart,
                 recordResponses
         );
     }
 
+
     // ==================================================
-    // 본인 목표 조회
-    // 다른 사람의 목표는 조회되지 않음
+    // 본인 채널 조회
+    // 다른 사용자의 채널 접근 방지
     // ==================================================
 
-    private ActivityGoal findMyGoal(
+    private Channel findMyChannel(
             String userid,
-            Long goalId
+            Integer channelIdx
     ) {
-        return goalRepository.findByIdxAndUser_Userid(goalId, userid)
+
+        return channelRepository
+                .findByIdxAndCreator_Userid(channelIdx, userid)
                 .orElseThrow(() -> notFound(
-                        "운동 목표를 찾을 수 없습니다."
+                        "운동 채널을 찾을 수 없습니다."
                 ));
     }
 
+
     // ==================================================
-    // 목표 응답 변환
+    // 채널 응답 변환
     // ==================================================
 
-    private GoalResponse toGoalResponse(ActivityGoal goal) {
+    private GoalResponse toChannelResponse(Channel channel) {
+
         LocalDate today = LocalDate.now(KOREA);
 
         String status;
 
-        if (today.isBefore(goal.getStartDate())) {
+        if (today.isBefore(channel.getStartDate())) {
             status = "PENDING";
-        } else if (today.isAfter(goal.getEndDate())) {
+        } else if (today.isAfter(channel.getEndDate())) {
             status = "COMPLETED";
         } else {
             status = "ACTIVE";
         }
 
         return new GoalResponse(
-                goal.getIdx(),
-                goal.getTitle(),
-                goal.getComment(),
-                goal.getSport(),
-                goal.getGoal(),
-                getUnit(goal.getSport()),
-                goal.getStartDate(),
-                goal.getEndDate(),
+                channel.getIdx().longValue(),
+                channel.getChannelTitle(),
+                channel.getChannelComment(),
+                channel.getSport(),
+                BigDecimal.valueOf(channel.getGoal()),
+                getUnit(channel.getSport()),
+                channel.getStartDate(),
+                channel.getEndDate(),
                 status,
                 "ACTIVE".equals(status),
                 "COMPLETED".equals(status)
         );
     }
 
+
     // ==================================================
     // 종목별 목표 단위
-    // 기존 생성 화면 기준
     // ==================================================
 
     private String getUnit(String sport) {
+
         return switch (sport) {
             case "걷기" -> "걸음";
             case "러닝", "사이클" -> "km";
@@ -358,90 +360,59 @@ public class ActivityService {
         };
     }
 
+
+    // ==================================================
+    // 종목별 달성량 계산
+    // ==================================================
+
     private BigDecimal getAchievedValue(
             String sport,
             ActivityRecord record
     ) {
+
         return switch (sport) {
-            case "걷기" -> BigDecimal.valueOf(record.getSteps());
-            case "러닝", "사이클" -> record.getDistanceKm();
-            default -> record.getCalories();
+
+            case "걷기" ->
+                    BigDecimal.valueOf(record.getSteps());
+
+            case "러닝", "사이클" ->
+                    record.getDistanceKm();
+
+            default ->
+                    record.getCalories();
         };
     }
 
-    // 누적 달성량 ÷ 목표량 × 100
+
+    // ==================================================
+    // 개별 운동 달성률 계산
+    // 해당 기록의 달성량 / 1회 목표량 * 100
+    // ==================================================
+
     private BigDecimal calculateRate(
             BigDecimal achieved,
             BigDecimal goal
     ) {
+
+        if (goal == null || goal.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+
         return achieved
                 .multiply(BigDecimal.valueOf(100))
                 .divide(goal, 2, RoundingMode.HALF_UP);
     }
 
-    // ==================================================
-    // 목표 입력 검사
-    // ==================================================
-
-    private void validateGoal(GoalRequest request) {
-        if (request == null) {
-            throw badRequest("목표 정보를 입력해주세요.");
-        }
-
-        if (request.channelTitle() == null
-                || request.channelTitle().isBlank()
-                || request.channelTitle().trim().length() > 100) {
-            throw badRequest("운동 이름은 1~100자로 입력해주세요.");
-        }
-
-        if (request.channelComment() == null
-                || request.channelComment().isBlank()) {
-            throw badRequest("운동 소개를 입력해주세요.");
-        }
-
-        if (request.sport() == null
-                || !SPORTS.contains(request.sport())) {
-            throw badRequest("올바른 운동 종목을 선택해주세요.");
-        }
-
-        validateDecimal(
-                request.goal(),
-                "목표량",
-                new BigDecimal("9999999999.99"),
-                2
-        );
-
-        if (request.goal().signum() <= 0) {
-            throw badRequest("목표량은 0보다 커야 합니다.");
-        }
-
-        if ("걷기".equals(request.sport())
-                && request.goal().stripTrailingZeros().scale() > 0) {
-            throw badRequest("걸음 목표는 정수로 입력해주세요.");
-        }
-
-        if (request.startDate() == null
-                || request.endDate() == null) {
-            throw badRequest("시작일과 종료일을 입력해주세요.");
-        }
-
-        if (request.endDate().isBefore(
-                request.startDate().plusDays(7)
-        )) {
-            throw badRequest(
-                    "종료일은 시작일로부터 최소 7일 이후로 선택해주세요."
-            );
-        }
-    }
 
     // ==================================================
-    // 기록 입력 검사
+    // 운동 기록 입력 검사
     // ==================================================
 
     private void validateRecord(
-            ActivityGoal goal,
+            Channel channel,
             RecordRequest request
     ) {
+
         if (request == null || request.recordedAt() == null) {
             throw badRequest("운동 날짜와 시간을 입력해주세요.");
         }
@@ -452,16 +423,21 @@ public class ActivityService {
             throw badRequest("미래의 운동 기록은 저장할 수 없습니다.");
         }
 
-        LocalDate recordDate = request.recordedAt().toLocalDate();
+        LocalDate recordDate =
+                request.recordedAt().toLocalDate();
 
-        if (recordDate.isBefore(goal.getStartDate())
-                || recordDate.isAfter(goal.getEndDate())) {
-            throw badRequest("목표 기간 안의 운동 기록만 저장할 수 있습니다.");
+        if (recordDate.isBefore(channel.getStartDate())
+                || recordDate.isAfter(channel.getEndDate())) {
+
+            throw badRequest(
+                    "목표 기간 안의 운동 기록만 저장할 수 있습니다."
+            );
         }
 
         if (request.durationSeconds() == null
                 || request.durationSeconds() <= 0
                 || request.durationSeconds() > 86400) {
+
             throw badRequest(
                     "운동시간은 1초 이상, 24시간 이하로 입력해주세요."
             );
@@ -484,9 +460,17 @@ public class ActivityService {
         if (request.steps() == null
                 || request.steps() < 0
                 || request.steps() > 1000000) {
-            throw badRequest("걸음 수는 0~1000000 사이로 입력해주세요.");
+
+            throw badRequest(
+                    "걸음 수는 0~1000000 사이로 입력해주세요."
+            );
         }
     }
+
+
+    // ==================================================
+    // 숫자 검증
+    // ==================================================
 
     private void validateDecimal(
             BigDecimal value,
@@ -494,19 +478,29 @@ public class ActivityService {
             BigDecimal maximum,
             int scale
     ) {
+
         if (value == null || value.signum() < 0) {
-            throw badRequest(label + "은 0 이상의 숫자로 입력해주세요.");
+            throw badRequest(
+                    label + "은 0 이상의 숫자로 입력해주세요."
+            );
         }
 
         if (value.compareTo(maximum) > 0
                 || value.stripTrailingZeros().scale() > scale) {
+
             throw badRequest(
                     label + "의 값 또는 소수점 자릿수를 확인해주세요."
             );
         }
     }
 
+
+    // ==================================================
+    // 예외 처리
+    // ==================================================
+
     private ResponseStatusException badRequest(String message) {
+
         return new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 message
@@ -514,16 +508,26 @@ public class ActivityService {
     }
 
     private ResponseStatusException notFound(String message) {
+
         return new ResponseStatusException(
                 HttpStatus.NOT_FOUND,
                 message
         );
     }
 
+
+    // ==================================================
+    // 날짜별 합계 임시 객체
+    // ==================================================
+
     private static class DailyTotal {
+
         private BigDecimal distance = BigDecimal.ZERO;
+
         private BigDecimal calories = BigDecimal.ZERO;
+
         private long seconds;
+
         private long steps;
     }
 }

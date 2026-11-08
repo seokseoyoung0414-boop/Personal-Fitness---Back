@@ -1,38 +1,32 @@
 package com.nody.nodyspring.repository;
 
 import com.nody.nodyspring.DB.User;
-import jakarta.transaction.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, String>{
-    //existsByUserid는 User엔티티에 userid라는 필드가 존재해야 작동.
-    //boolean existsByUseridAndEmail(String userid, String email);
-    //existsByUseridAndEmail User엔티티에 userid라는 필드와 email이라는 필드가 존재해야 작동.
+public interface UserRepository extends JpaRepository<User, String> {
 
-    // userid가 존재하는지
+    // userid 존재 여부
     boolean existsByUserid(String userid);
-    // nickname이 존재하는지
+
+    // nickname 존재 여부
     boolean existsByNickname(String nickname);
-    // email이 존재하는지
+
+    // email 존재 여부
     boolean existsByEmail(String email);
-    // phone이 존재하는지
+
+    // phone 존재 여부
     boolean existsByPhone(String phone);
 
+    // userid로 사용자 조회
     Optional<User> findByUserid(String userid);
 
+    // phone으로 사용자 조회
     Optional<User> findByPhone(String phone);
 
+    // email로 사용자 조회
     Optional<User> findByEmail(String email);
-
-    @Modifying
-    @Transactional
-    @Query("UPDATE User u SET u.point = u.point + :point WHERE u.userid = :userid")
-    void addPoint(@Param("userid") String userid, @Param("point") int point);
 }

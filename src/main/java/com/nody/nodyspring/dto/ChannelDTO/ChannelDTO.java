@@ -1,7 +1,6 @@
 package com.nody.nodyspring.dto.ChannelDTO;
 
 import lombok.*;
-
 import java.time.LocalDate;
 
 @Getter
@@ -16,9 +15,7 @@ public class ChannelDTO {
     private String channelComment;
     private LocalDate startDate;
     private LocalDate endDate;
-    private String modes;
     private Boolean complete;
     private Boolean channelBuild;
-    private int countUser;
     private int goal;
 }

@@ -20,9 +20,10 @@ public class ActivityRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long idx;
 
+    // 운동 기록이 속한 채널
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "goal_id", nullable = false)
-    private ActivityGoal goal;
+    @JoinColumn(name = "channel_idx", nullable = false)
+    private Channel channel;
 
     // 실제 운동한 날짜와 시간
     @Column(name = "recorded_at", nullable = false)
